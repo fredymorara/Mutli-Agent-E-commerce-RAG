@@ -75,7 +75,7 @@ def _load_cf_exports() -> dict:
     if not any(name.startswith(f"{PROJECT_NAME}-") for name in exports):
         raise ConfigError(
             f"No CloudFormation exports found for stack '{PROJECT_NAME}' in {AWS_REGION}. "
-            f"Deploy infrastructure/starter_stack.yaml (stack name '{PROJECT_NAME}') first."
+            f"Deploy infrastructure/stack.yaml (stack name '{PROJECT_NAME}') first."
         )
     _exports_cache = exports
     return exports

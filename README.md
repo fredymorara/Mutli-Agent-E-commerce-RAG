@@ -3,9 +3,9 @@
 **Portfolio project · Amazon Bedrock AgentCore · Strands Agents SDK**
 **Built October 2026 · Future AWS Agent Engineer Nanodegree capstone (Udacity + AWS) · passed capstone review**
 
-> I designed and shipped a production-style customer support system where a fast routing agent delegates to specialised workers, policy answers are grounded in three independent RAG knowledge bases, and every request is traceable end to end in AWS X-Ray. The finished system scored **120/120 points (100%)** on the project's evaluation suite.
+> A routing agent reads each customer request and hands it to specialist workers. Order lookups hit DynamoDB, policy questions are answered from three knowledge bases queried in parallel, and a dedicated agent writes the final reply. Every step is traced in AWS X-Ray. The system passed all 120 points of the course evaluation suite.
 
-[**Read the build journal →**](BUILD_JOURNAL.md) — what the course expected, what I actually built and ran that day, and the limitations I recorded.
+I kept a [build journal](BUILD_JOURNAL.md) with what the course provided, what I wrote, and how the two build sessions went.
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Strands Agents](https://img.shields.io/badge/Strands-Agents-7C3AED)
@@ -15,25 +15,25 @@
 
 ---
 
-## Results at a glance
+## At a glance
 
 | | |
 |---|---|
 | **Automated evaluation** | **120 / 120 pts (100%)** across Tasks 2–6 |
 | **Agent topology** | 1 orchestrator + 4 worker agents + 3 parallel retriever sub-agents |
 | **Grounding** | 3 Bedrock Knowledge Bases (returns, shipping, warranty) on S3 Vectors |
-| **Scenarios verified** | Return request, policy question, and pricing calculation — all passed end to end |
-| **Safety** | Versioned Bedrock Guardrail applied to every model invocation |
-| **Observability** | 100% X-Ray sampling; full orchestrator → worker service map in CloudWatch |
-| **Deployment** | Live Amazon Bedrock AgentCore Runtime (PUBLIC / HTTP) |
+| **Scenarios** | Return request, policy question and pricing calculation, all run end to end |
+| **Safety** | Versioned Bedrock Guardrail on every model invocation |
+| **Observability** | 100% X-Ray sampling; orchestrator → worker service map in CloudWatch |
+| **Deployment** | Amazon Bedrock AgentCore Runtime (PUBLIC / HTTP) |
 
 ---
 
 ## The problem
 
-NovaMart's support team needs to answer order-status, return-eligibility and policy questions accurately. A single prompt cannot reliably combine live order data, customer-tier rules, policy documents and corporate safety constraints in one shot.
+NovaMart's support team needs to answer order-status, return-eligibility and policy questions accurately. A single prompt can't reliably combine live order data, customer-tier rules, policy documents and safety constraints in one go.
 
-**What I built:** a coordinated system of specialist agents that share a single, versioned session state. A cheap, fast model routes the work; more capable models reason over order facts, refund rules and retrieved policy text; a final agent composes the customer-facing answer. Nothing is invented — every claim is grounded in DynamoDB facts or retrieved policy passages.
+**What I built:** a group of agents that share a versioned session record. A small, fast model routes the request; larger models work through the facts, refund rules and retrieved policy text; one agent writes the customer-facing reply. The workers stick to order data and retrieved policy passages instead of filling in gaps themselves.
 
 ## Architecture
 
@@ -57,83 +57,81 @@ flowchart TD
     X[X-Ray + CloudWatch Logs<br/>100% sampling] -. every tool call .-> O
 ```
 
-**Design highlights**
+**A few design choices**
 
-- **Two-tier model strategy** — Claude Haiku 4.5 handles deterministic routing; Claude Sonnet 4.5 handles reasoning, policy synthesis and customer communication.
-- **Shared state, not shared prompts** — one DynamoDB `WorkflowStateTable` record per session, with a `version` field and conditional writes (optimistic locking + retry) so agents never overwrite each other.
-- **Parallel RAG** — the policy coordinator fans out to three retriever sub-agents concurrently with `ThreadPoolExecutor(max_workers=3)`, then synthesises their grounded passages into one answer.
-- **Safety at the model boundary** — a versioned Bedrock Guardrail (content filters, PII blocking/anonymising, three DENY topics, profanity) is attached to all five agents.
-- **Full traceability** — every routing tool call becomes an X-Ray subsegment, producing a live service map of the agent call chain.
+- **Split routing from reasoning** — Haiku 4.5 at temperature 0.0 handles routing; Sonnet 4.5 does the reasoning, policy synthesis and reply writing.
+- **Share state, not prompts** — each session has one DynamoDB record with a `version` field and conditional writes, so agents don't overwrite each other's work.
+- **Fetch policies in parallel** — the policy agent runs three retrievers at once with `ThreadPoolExecutor(max_workers=3)` and synthesises their passages into one answer.
+- **Guardrail at the model boundary** — one versioned Bedrock Guardrail (content, PII, denied topics, profanity) applies to all five agents.
+- **Trace everything** — each routing tool call becomes an X-Ray subsegment, which gives a live map of the call chain.
 
-Read the engineering rationale, trade-offs and hard problems in the **[Case Study](docs/CASE_STUDY.md)**.
+More on the design and trade-offs in the [case study](docs/CASE_STUDY.md).
 
 ---
 
-## What I actually did
+## What I built
 
-The course supplied the infrastructure, helper modules and test suite. **I built the behaviour, deployed it, configured the AWS-side resources, and produced the evidence.**
+The course provided the infrastructure stack, helper modules and test suite. I wrote the agent behaviour, deployed the runtime, configured the AWS-side resources, and ran the system end to end.
 
-| Area | What I implemented | Evidence |
+| Area | What I wrote | See it |
 |---|---|---|
-| **Agent behaviour** (Task 2) | The five agents, their tools, system prompts and routing rules; session init and the mandatory CommunicationAgent final step. | [Inventory](Submission/scenario_tests_step_01.png) · [Refund](Submission/scenario_tests_step_02.png) · [Reply](Submission/scenario_tests_step_03_1.png) · [Policy](Submission/scenario_tests_step_04_1.png) · [Math](Submission/scenario_tests_step_06.png) |
-| **Parallel RAG** (Task 5) | Three retriever sub-agents and `search_all_policies`; created and synced the three Knowledge Bases in the console, wired their IDs into `.env`. | [KB list](Submission/knowledge_bases.png) · [Returns](Submission/returns_kb.png) · [Shipping](Submission/shipping_kb.png) · [Warranty](Submission/warranty_kb.png) · [Parallel run](Submission/test_agent_tests_03.png) |
-| **Guardrails** (Task 3) | Created the guardrail (content, PII, denied topics, profanity) and published a numbered version used by the runtime. | [CLI invocation](Submission/agentcore_cli_test.png) · [Policy checks](Submission/test_agent_tests_01.png) |
-| **Deployment** (Task 3) | Implemented the runtime deployment function and environment wiring; deployed to AgentCore Runtime (PUBLIC / HTTP) via the CLI. | [Runtime invocation](Submission/Script_test.png) · [Deploy checks](Submission/test_agent_tests_01.png) |
-| **Memory & observability** (Tasks 4 & 6) | Configured AgentCore Memory (session summaries, 7-day expiry), CloudWatch INFO logging and X-Ray at 100% sampling. | [Task 4 checks](Submission/test_agent_tests_01.png) · [X-Ray map](Submission/xray_service_map.png) |
-| **Verification** | Ran the three scripted scenarios, invoked the deployed runtime two ways, and ran the automated suite. | [120/120 score](Submission/test_agent_tests_04.png) |
+| **Agent behaviour** (Task 2) | The five agents, their tools and prompts, and the routing rules; session setup and the mandatory CommunicationAgent last step. | [Inventory](screenshots/scenario_tests_step_01.png) · [Refund](screenshots/scenario_tests_step_02.png) · [Reply](screenshots/scenario_tests_step_03_1.png) · [Policy](screenshots/scenario_tests_step_04_1.png) · [Math](screenshots/scenario_tests_step_06.png) |
+| **Parallel RAG** (Task 5) | Three retriever sub-agents and `search_all_policies`; created and synced the three Knowledge Bases in the console and wired their IDs into `.env`. | [KB list](screenshots/knowledge_bases.png) · [Returns](screenshots/returns_kb.png) · [Shipping](screenshots/shipping_kb.png) · [Warranty](screenshots/warranty_kb.png) · [Parallel run](screenshots/test_agent_tests_03.png) |
+| **Guardrails** (Task 3) | Created the guardrail (content, PII, denied topics, profanity) and published a numbered version for the runtime. | [CLI invocation](screenshots/agentcore_cli_test.png) · [Policy checks](screenshots/test_agent_tests_01.png) |
+| **Deployment** (Task 3) | Wrote the runtime deployment function and environment wiring; deployed to AgentCore Runtime (PUBLIC / HTTP) via the CLI. | [Runtime invocation](screenshots/Script_test.png) · [Deploy checks](screenshots/test_agent_tests_01.png) |
+| **Memory & observability** (Tasks 4 & 6) | Configured AgentCore Memory (session summaries, 7-day expiry), CloudWatch INFO logging and X-Ray at 100% sampling. | [Task 4 checks](screenshots/test_agent_tests_01.png) · [X-Ray map](screenshots/xray_service_map.png) |
+| **Verification** | Ran the three scenarios, invoked the deployed runtime two ways, and ran the automated suite. | [Final test run](screenshots/test_agent_tests_04.png) |
 
-**Provided by the course, not written by me:** the CloudFormation stack, `seed_data.py`, `cleanup.py`, `config.py`, the WorkflowState helpers with optimistic locking, `agent_utils.py`, `agent_observability.py`, `agentcore_cli.py`, `bedrock_kb_retrieval.py`, `demo.py`, and the automated test suite. The exact split is in [Build Journal §1](BUILD_JOURNAL.md#1-what-was-expected--what-i-did).
+The course-supplied pieces are listed in [Build Journal §1](BUILD_JOURNAL.md#1-what-was-expected--what-i-did) — mainly the CloudFormation stack, `config.py`, `seed_data.py`, the WorkflowState helpers, the trace and CLI helpers, and the tests.
 
-### What that day actually looked like
+### How the build went
 
-Two build sessions, 19–20 October 2026. Reconstructed from screenshot timestamps and AgentCore CLI logs: deployment iterations on the 19th (five deploys, first invocation at 21:58); on the 20th — seeding at 19:51, Knowledge Bases created and synced by 20:07, three more deploys, two live invocations, all three scenarios between 20:42 and 20:56, the test suite from 21:00 to 21:21, and the X-Ray map at 21:33.
+Two sessions, 19–20 October 2026, reconstructed from file timestamps and AgentCore CLI logs: five deploys on the 19th, first invocation at 21:58. On the 20th, seeding at 19:51, three Knowledge Bases created and synced by 20:07, a few more deploys, two live invocations, the three scenarios from 20:42 to 20:56, the test suite from 21:00 to 21:21, and the X-Ray map at 21:33.
 
-Measured step times: Inventory **15.0 s**, Refund **15.9 s**, Communication **14.6 s** on the return flow; Policy **25.8 s** (including ~14 s of parallel retrieval) and Communication **13.1 s** on the policy question; Communication **11.3 s** on the calculation. The calculation skipping three workers is the clearest example of routing paying off.
+Step times from the terminal: Inventory **15.0 s**, Refund **15.9 s**, Communication **14.6 s** on the return flow; Policy **25.8 s** (including ~14 s of retrieval) and Communication **13.1 s** on the policy question; Communication **11.3 s** on the calculation. The calculation skipping three workers is where the routing pays off.
 
-Full narrative, commands and figure mapping: **[Build Journal](BUILD_JOURNAL.md)**. Screenshots live in [`Submission/`](Submission/) and are catalogued in the **[Evidence Index](docs/EVIDENCE.md)** — proof of work, not step-by-step documentation.
+Full narrative and commands are in the [build journal](BUILD_JOURNAL.md). The screenshots are in [`screenshots/`](screenshots/), indexed in [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md).
 
-### What I observed and would improve
+### What I'd change next time
 
-I recorded these limits rather than claiming more than the evidence shows:
-
-- Worker latency is 11–26 s per step; the three-worker return chain is ~45 s of worker time. Streaming and concurrent independent steps would come first.
-- Live parallel output still interleaves in the terminal, although the printed results after `[END]` were clean.
-- `customer_tiers.txt` sits under all three S3 prefixes, so retrievers overlap and one run showed a conflicting 2-year vs 1-year warranty figure.
-- The refund agent approved the return but did **not** call `initiate_refund` in the captured run, so the record update was not exercised.
-- The reply reports **$134.95** by rounding the discount before subtracting; rounding the total instead gives $134.96.
-- Not captured, therefore not claimed: guardrail blocks for the blocked-topic examples, memory recall across sessions, and (in the journal figures) the Task 6 test output.
+- Latency is the main one: 11–26 s per worker step, and the return flow runs three in sequence (~45 s of worker time). I'd stream the reply and run independent steps concurrently.
+- All three retrievers see `customer_tiers.txt`, so their answers overlap; one run had a 2-year vs 1-year warranty mismatch. I'd separate the source documents and have the coordinator reconcile conflicting passages.
+- The refund agent approved the return but didn't call `initiate_refund` in that run, so the DynamoDB update never happened. I'd make that hand-off explicit.
+- The reply rounded the discount before subtracting ($134.95); rounding the total gives $134.96. A stated rounding rule in the prompt fixes that.
+- Live streamed text still interleaves during parallel retrieval, although the printed results after `[END]` came out clean.
+- Things I haven't tried yet: guardrail blocks for the denied-topic examples, and memory recall across sessions.
 
 Details in [Build Journal §5](BUILD_JOURNAL.md#5-observations-and-next-steps-i-recorded).
 
 ---
 
-## Selected evidence
+## Screenshots from the runs
 
 <details>
-<summary><b>120/120 on the full evaluation suite (Tasks 2–6)</b></summary>
+<summary><b>Final test run — 120/120</b></summary>
 
-![Full test suite result](Submission/test_agent_tests_04.png)
+![Full test suite result](screenshots/test_agent_tests_04.png)
 
 </details>
 
 <details>
-<summary><b>Live X-Ray service map — orchestrator calling every worker and retriever</b></summary>
+<summary><b>X-Ray service map — the orchestrator and its workers</b></summary>
 
-![X-Ray service map](Submission/xray_service_map.png)
-
-</details>
-
-<details>
-<summary><b>Live deployed agent answering a policy question with grounded content</b></summary>
-
-![AgentCore CLI invocation](Submission/agentcore_cli_test.png)
+![X-Ray service map](screenshots/xray_service_map.png)
 
 </details>
 
 <details>
-<summary><b>Three parallel retrievers answering one policy question in 14.4s</b></summary>
+<summary><b>Policy answer from the deployed agent</b></summary>
 
-![Parallel RAG trace](Submission/test_agent_tests_03.png)
+![AgentCore CLI invocation](screenshots/agentcore_cli_test.png)
+
+</details>
+
+<details>
+<summary><b>Three retrievers answering one question in parallel (14.4 s)</b></summary>
+
+![Parallel RAG trace](screenshots/test_agent_tests_03.png)
 
 </details>
 
@@ -154,35 +152,39 @@ Details in [Build Journal §5](BUILD_JOURNAL.md#5-observations-and-next-steps-i-
 
 ---
 
-## Repository map
+## Repository layout
 
 ```text
 .
-├── README.md                    # Portfolio landing page (this file)
-├── BUILD_JOURNAL.md             # Expected vs. what I actually built and ran that day
-├── NovaMart_Build_Journal.pdf   # Original 13-page build journal (source document)
+├── README.md                    # This file
+├── BUILD_JOURNAL.md             # Build notes: plan vs. what I did, with timings
+├── NovaMart_Build_Journal.pdf   # Original 13-page journal
+├── .env.example                 # Configuration template
+├── src/                         # Agent implementation
+│   ├── agent_orchestrator.py    # Five agents, routing, guardrail, deployment
+│   ├── config.py                # CloudFormation-backed configuration
+│   ├── agent_observability.py   # X-Ray and CloudWatch instrumentation
+│   ├── agent_utils.py           # Terminal trace UI
+│   ├── agentcore_cli.py         # AgentCore CLI wrapper
+│   ├── bedrock_kb_retrieval.py  # Knowledge Base retrieval helper
+│   └── demo.py                  # Single end-to-end request
+├── infrastructure/              # CloudFormation stack + data seeding
+├── tests/                       # 120-point evaluation suite
+├── diagrams/                    # Architecture and flow diagrams
+├── screenshots/                 # 25 screenshots from the runs
 ├── docs/                        # Documentation hub (docs/README.md)
-│   ├── CASE_STUDY.md            # Architecture, decisions, trade-offs, next steps
-│   └── EVIDENCE.md              # Screenshot index + journal figure mapping
-├── project/starter/             # Original project scaffold + delivered work
-│   ├── src/                     # Agent implementation, CLI, retrieval, tracing
-│   ├── infrastructure/          # CloudFormation stack + data seeding
-│   ├── tests/                   # 120-point evaluation suite
-│   ├── diagrams/                # Architecture and flow diagrams
-│   └── agentcore/               # AgentCore CLI project + build artefacts
-└── Submission/                  # Completed agent code + screenshot evidence
-    ├── agent_orchestrator.py    # Five-agent system, deployment pipeline
-    ├── config.py                # Lazy, CloudFormation-backed configuration
-    └── *.png                    # 25 evidence screenshots (see docs/EVIDENCE.md)
+│   ├── CASE_STUDY.md            # Design and trade-offs
+│   └── SCREENSHOTS.md           # Screenshot index
+└── project/starter/             # Original course scaffold and local build cache
 ```
 
-### Key files
+### Code to look at
 
-- [`Submission/agent_orchestrator.py`](Submission/agent_orchestrator.py) — *my implementation*: all five agents, routing tools, guardrail creation and the deployment pipeline.
-- [`Submission/config.py`](Submission/config.py) — *provided by the course*: lazy, cached resolution of AWS resource IDs from CloudFormation exports and environment variables.
-- [`project/starter/infrastructure/starter_stack.yaml`](project/starter/infrastructure/starter_stack.yaml) — infrastructure as code.
-- [`project/starter/tests/test_agent.py`](project/starter/tests/test_agent.py) — the evaluation suite that produced the 120/120 result.
-- [`project/starter/src/demo.py`](project/starter/src/demo.py) — single-request local demo.
+- [`src/agent_orchestrator.py`](src/agent_orchestrator.py) — my implementation of the five agents, routing tools, guardrail creation and deployment pipeline.
+- [`src/config.py`](src/config.py) — course-provided config that resolves resource IDs from CloudFormation exports and environment variables.
+- [`infrastructure/stack.yaml`](infrastructure/stack.yaml) — infrastructure as code.
+- [`tests/test_agent.py`](tests/test_agent.py) — the evaluation suite behind the 120/120 result.
+- [`src/demo.py`](src/demo.py) — single-request local demo.
 
 <details>
 <summary><b>Run it locally (optional)</b></summary>
@@ -190,12 +192,11 @@ Details in [Build Journal §5](BUILD_JOURNAL.md#5-observations-and-next-steps-i-
 Requires AWS credentials and the infrastructure stack deployed. From the repository root:
 
 ```powershell
-copy Submission\.env.example .env     # fill in your resource IDs
+copy .env.example .env            # fill in your resource IDs
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-cd project\starter
 python infrastructure/seed_data.py
 python src/agent_orchestrator.py test  # three traced scenarios
 python src/agent_orchestrator.py chat  # interactive chat
@@ -208,8 +209,8 @@ python tests/test_agent.py all        # full 120-point evaluation
 
 ## Notes
 
-- `.env` is git-ignored; [`Submission/.env.example`](Submission/.env.example) contains placeholder names only — no credentials or resource IDs are committed.
-- Original course materials are © Udacity and licensed under CC BY-NC-ND 4.0 — see [`LICENSE.md`](LICENSE.md). The agent implementation in `Submission/` is my capstone work; the source narrative is [`NovaMart_Build_Journal.pdf`](NovaMart_Build_Journal.pdf) and its searchable version is [`BUILD_JOURNAL.md`](BUILD_JOURNAL.md).
+- `.env` is git-ignored; [`.env.example`](.env.example) has placeholder names only.
+- Original course materials are © Udacity and licensed under CC BY-NC-ND 4.0 — see [`LICENSE.md`](LICENSE.md). The agent implementation in `src/` is my capstone work; the original write-up is [`NovaMart_Build_Journal.pdf`](NovaMart_Build_Journal.pdf), with a searchable version in [`BUILD_JOURNAL.md`](BUILD_JOURNAL.md).
 
 <!-- Replace the placeholders below with your own details before publishing. -->
 **Built by [Your Name]** · [GitHub](https://github.com/your-username) · [LinkedIn](https://www.linkedin.com/in/your-profile)

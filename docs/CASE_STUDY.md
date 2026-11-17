@@ -79,7 +79,7 @@ I created one **versioned Bedrock Guardrail** and attached it to every agent's `
 - **Word policy:** managed PROFANITY list.
 - Custom blocked-input / blocked-output messaging.
 
-The **denied-topic boundary matters**: "pricing negotiations" is defined as haggling or changing an advertised price, and explicitly allows arithmetic that applies a stated discount. Without that boundary an ordinary question such as *"5 items at $29.99 with 10% off?"* could be blocked. The calculation scenario passes through the guardrail and is answered ([proof](../Submission/scenario_tests_step_06.png)).
+The **denied-topic boundary matters**: "pricing negotiations" is defined as haggling or changing an advertised price, and explicitly allows arithmetic that applies a stated discount. Without that boundary an ordinary question such as *"5 items at $29.99 with 10% off?"* could be blocked. The calculation scenario passes through the guardrail and is answered ([run](../screenshots/scenario_tests_step_06.png)).
 
 ### Decision 5 — Deploy the real agent, not a notebook
 
@@ -89,12 +89,12 @@ The runtime is deployed as **direct code deployment** through the AgentCore CLI:
 
 | Task | Mine | Provided by the course | Entry points |
 |---|---|---|---|
-| **2 — Orchestration** | `build_inventory_agent`, `build_refund_agent`, `build_policy_agent`, `build_communication_agent`, `build_orchestrator_agent`, `build_agent_graph`; all routing rules and prompts | WorkflowState helpers with optimistic locking; `agent_utils.py` trace UI | [`agent_orchestrator.py`](../Submission/agent_orchestrator.py) |
-| **3 — Guardrails + deployment** | `create_guardrail` (create → publish version), `deploy_to_agentcore_runtime`, runtime environment wiring | `agentcore_cli.py` wrapper | [`agent_orchestrator.py`](../Submission/agent_orchestrator.py) |
+| **2 — Orchestration** | `build_inventory_agent`, `build_refund_agent`, `build_policy_agent`, `build_communication_agent`, `build_orchestrator_agent`, `build_agent_graph`; all routing rules and prompts | WorkflowState helpers with optimistic locking; `agent_utils.py` trace UI | [`agent_orchestrator.py`](../src/agent_orchestrator.py) |
+| **3 — Guardrails + deployment** | `create_guardrail` (create → publish version), `deploy_to_agentcore_runtime`, runtime environment wiring | `agentcore_cli.py` wrapper | [`agent_orchestrator.py`](../src/agent_orchestrator.py) |
 | **4 — Memory** | `configure_memory` — `SESSION_SUMMARY` strategy, 7-day event expiry | — | `configure_memory()` |
-| **5 — Knowledge Bases** | Three retriever sub-agents; concurrent `search_all_policies`; KB creation/sync in the console + `.env` wiring | `bedrock_kb_retrieval.py` retrieval client | [`bedrock_kb_retrieval.py`](../project/starter/src/bedrock_kb_retrieval.py) |
-| **6 — Observability** | CloudWatch INFO logging and X-Ray 100% sampling configuration | `@tool` X-Ray wrapper in `agent_observability.py` | [`agent_observability.py`](../project/starter/src/agent_observability.py) |
-| **Config & infra** | `.env` wiring and deployed resource IDs | Lazy config from CloudFormation exports; CloudFormation stack; `seed_data.py`, `cleanup.py`; automated test suite | [`config.py`](../Submission/config.py), [`starter_stack.yaml`](../project/starter/infrastructure/starter_stack.yaml), [`seed_data.py`](../project/starter/infrastructure/seed_data.py) |
+| **5 — Knowledge Bases** | Three retriever sub-agents; concurrent `search_all_policies`; KB creation/sync in the console + `.env` wiring | `bedrock_kb_retrieval.py` retrieval client | [`bedrock_kb_retrieval.py`](../src/bedrock_kb_retrieval.py) |
+| **6 — Observability** | CloudWatch INFO logging and X-Ray 100% sampling configuration | `@tool` X-Ray wrapper in `agent_observability.py` | [`agent_observability.py`](../src/agent_observability.py) |
+| **Config & infra** | `.env` wiring and deployed resource IDs | Lazy config from CloudFormation exports; CloudFormation stack; `seed_data.py`, `cleanup.py`; automated test suite | [`config.py`](../src/config.py), [`stack.yaml`](../infrastructure/stack.yaml), [`seed_data.py`](../infrastructure/seed_data.py) |
 
 ### Request lifecycle (return request)
 
@@ -104,9 +104,9 @@ The runtime is deployed as **direct code deployment** through the AgentCore CLI:
 4. `route_to_communication_agent` → reads the full state and writes the final empathetic, grounded response.
 5. Every tool call is recorded as an X-Ray subsegment under `NovaMart-Orchestrator`.
 
-The terminal trace in [`scenario_tests_step_01.png`](../Submission/scenario_tests_step_01.png) → [`scenario_tests_step_03_1.png`](../Submission/scenario_tests_step_03_1.png) shows the sequence, including state versions incrementing `0 → 1 → 2 → 3`.
+The terminal trace in [`scenario_tests_step_01.png`](../screenshots/scenario_tests_step_01.png) → [`scenario_tests_step_03_1.png`](../screenshots/scenario_tests_step_03_1.png) shows the sequence, including state versions incrementing `0 → 1 → 2 → 3`.
 
-**Important caveat:** in the captured run the RefundAgent approved the return and asked the customer for a reason, but did **not** call `initiate_refund`. The approval-to-record-update hand-off was therefore not exercised in the evidence. See [Build Journal §5](../BUILD_JOURNAL.md#5-observations-and-next-steps-i-recorded).
+**Important caveat:** in the captured run the RefundAgent approved the return and asked the customer for a reason, but did **not** call `initiate_refund`. The approval-to-record-update hand-off therefore never happened in that run. See [Build Journal §5](../BUILD_JOURNAL.md#5-observations-and-next-steps-i-recorded).
 
 ## 4. Engineering details and trade-offs
 
@@ -114,7 +114,7 @@ The terminal trace in [`scenario_tests_step_01.png`](../Submission/scenario_test
 The `PricingNegotiations` deny topic is deliberately defined as haggling or changing an advertised price, and explicitly excludes arithmetic applying a stated discount. The `STANDARD` topic tier and cross-region guardrail profile are used, and the guardrail is published as a numbered version (not DRAFT) before the runtime is pointed at it. This is what lets the calculation scenario pass while genuine negotiation stays blocked.
 
 **2. Parallel retrieval output is only partly tamed.**
-The Strands SDK streams output from internal threads, so three concurrent retrievers interleave in the live terminal view. The course-provided trace helper suppresses sub-agent output during the parallel step, and my coordinator returns each retriever's text as a value so results can be printed cleanly and sequentially after the `[END]` marker. The clean printed results and final answers were unaffected, but the live view still mixes streamed text ([evidence](../Submission/scenario_tests_step_04_2.png)). I did not fully solve this.
+The Strands SDK streams output from internal threads, so three concurrent retrievers interleave in the live terminal view. The course-provided trace helper suppresses sub-agent output during the parallel step, and my coordinator returns each retriever's text as a value so results can be printed cleanly and sequentially after the `[END]` marker. The clean printed results and final answers were unaffected, but the live view still mixes streamed text ([run](../screenshots/scenario_tests_step_04_2.png)). I did not fully solve this.
 
 **3. Concurrent state writes are safe by contract.**
 The course-provided WorkflowState helpers use conditional DynamoDB updates with a `version` counter and retry-on-conflict. My routing tools read the current version before invoking a worker and pass it to the update, so no read-modify-write can silently overwrite another agent's field.
@@ -145,9 +145,9 @@ I verified at two levels.
 | 6 | CloudWatch INFO logging, X-Ray 100% sampling, Transaction Search, traces received | Pass |
 | **Total** | | **120 / 120 (100%)** |
 
-The build journal describes 30 checks across Tasks 2–5; the final screenshot retained in `Submission/` shows the Task 6 observability checks as well and the 120/120 score. The difference is in what was captured in each account, not in the outcome.
+The build journal describes 30 checks across Tasks 2–5; the final screenshot retained in `screenshots/` shows the Task 6 observability checks as well and the 120/120 score. The difference is in what was captured in each account, not in the outcome.
 
-See [`test_agent_tests_04.png`](../Submission/test_agent_tests_04.png), the [Build Journal](../BUILD_JOURNAL.md) and the full [Evidence Index](EVIDENCE.md).
+See [`test_agent_tests_04.png`](../screenshots/test_agent_tests_04.png), the [Build Journal](../BUILD_JOURNAL.md) and the full [screenshot index](SCREENSHOTS.md).
 
 ## 6. What I'd do next
 
@@ -161,4 +161,4 @@ From the build journal, in priority order:
 
 ## 7. Credits
 
-Built in October 2026 as the capstone project for the **Future AWS Agent Engineer Nanodegree (Udacity + AWS)** and passed the capstone review. Original course materials are © Udacity, CC BY-NC-ND 4.0 ([LICENSE](../LICENSE.md)); the agent implementation and evidence in `Submission/` are my completed work. Source narrative: [`NovaMart_Build_Journal.pdf`](../NovaMart_Build_Journal.pdf).
+Built in October 2026 as the capstone project for the **Future AWS Agent Engineer Nanodegree (Udacity + AWS)** and passed the capstone review. Original course materials are © Udacity, CC BY-NC-ND 4.0 ([LICENSE](../LICENSE.md)); the agent implementation in `src/` and the screenshots in `screenshots/` are my completed work. Source narrative: [`NovaMart_Build_Journal.pdf`](../NovaMart_Build_Journal.pdf).
