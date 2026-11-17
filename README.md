@@ -1,4 +1,4 @@
-# NovaMart — Enterprise Multi-Agent Customer Support System
+# NovaMart : Enterprise Multi-Agent Customer Support System
 
 **Portfolio project · Amazon Bedrock AgentCore · Strands Agents SDK**
 **Built October 2026 · Future AWS Agent Engineer Nanodegree capstone (Udacity + AWS) · passed capstone review**
