@@ -212,5 +212,4 @@ python tests/test_agent.py all        # full 120-point evaluation
 - `.env` is git-ignored; [`.env.example`](.env.example) has placeholder names only.
 - Original course materials are © Udacity and licensed under CC BY-NC-ND 4.0 — see [`LICENSE.md`](LICENSE.md). The agent implementation in `src/` is my capstone work; the original write-up is [`NovaMart_Build_Journal.pdf`](NovaMart_Build_Journal.pdf), with a searchable version in [`BUILD_JOURNAL.md`](BUILD_JOURNAL.md).
 
-<!-- Replace the placeholders below with your own details before publishing. -->
-**Built by Fredrick M. Morara** · [GitHub](https://github.com/your-username) · [LinkedIn](https://www.linkedin.com/in/your-profile)
+**Fredrick M. Morara** · [GitHub](https://github.com/fredymorara) · [LinkedIn](https://www.linkedin.com/in/freddymorara) · [freddymorara.tech](https://freddymorara.tech)
