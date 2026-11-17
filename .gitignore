@@ -1,0 +1,17 @@
+# Local environment / secrets (never commit)
+.env
+
+# Python bytecode and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node / AgentCore CLI build caches
+node_modules/
+project/starter/agentcore/.cache/
+
+# Course workspace leftovers
+Exercise Planning Document.md
+
+Submission *
